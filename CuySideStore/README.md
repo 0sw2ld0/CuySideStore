@@ -38,6 +38,10 @@ CuySideStore/
     ├── package.json                   ← Dependencias (Node.js)
     ├── server.js                      ← API de pruebas con App Attest mock
     └── attestation-mock.js            ← Mock de App Attest para pruebas
+└── web/                               ← Web UI local (http://localhost:4567)
+    ├── package.json                   ← Dependencias (express, multer)
+    ├── server.js                      ← API que envuelve el CLI + streaming SSE
+    └── public/index.html              ← Interfaz web (drag & drop, consola en vivo)
 ```
 
 ---
@@ -92,7 +96,23 @@ graph TB
 
 ## Inicio rápido
 
-### Tool CLI unificada (recomendado)
+### Web UI local (recomendado)
+
+```bash
+cd CuySideStore/web
+npm install
+npm start
+# Abre http://localhost:4567
+```
+
+La interfaz web permite:
+- Arrastrar y soltar tu IPA
+- Seleccionar certificado de firma (se detectan automáticamente)
+- Ejecutar el pipeline completo o comandos individuales
+- Ver la salida de consola en tiempo real
+- Descargar los artefactos generados
+
+### Tool CLI unificada (alternativa)
 
 ```bash
 cd CuySideStore

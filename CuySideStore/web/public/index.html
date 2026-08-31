@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CuySideStore — Pruebas de Seguridad iOS</title>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --bg-card: #161b22;
+            --bg-input: #0d1117;
+            --border: #30363d;
+            --text: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --success: #3fb950;
+            --danger: #f85149;
+            --warning: #d29922;
+            --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* ─── Header ─── */
+        header {
+            border-bottom: 1px solid var(--border);
+            padding: 20px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--bg-card);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #58a6ff, #bc8cff);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+
+        .logo h1 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .logo small {
+            display: block;
+            color: var(--text-muted);
+            font-size: 12px;
+            font-weight: 400;
+        }
+
+        .header-actions { display: flex; gap: 10px; }
+
+        /* ─── Layout ─── */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px 32px;
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 24px;
+        }
+
+        @media (max-width: 900px) {
+            .container { grid-template-columns: 1fr; }
+        }
+
+        /* ─── Cards ─── */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card h2 .icon { font-size: 16px; }
+
+        /* ─── Botones ─── */
+        button {
+            background: #21262d;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        button:hover { background: #30363d; border-color: #8b949e; }
+
+        button.primary {
+            background: #238636;
+            border-color: #2ea043;
+            color: #fff;
+        }
+
+        button.primary:hover { background: #2ea043; }
+
+        button.accent {
+            background: transparent;
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        button.accent:hover { background: rgba(88, 166, 255, 0.1); }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.small { padding: 4px 10px; font-size: 12px; }
+
+        button.danger {
+            background: transparent;
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        button.danger:hover { background: rgba(248, 81, 73, 0.1); }
+
+        /* ─── Upload ─── */
+        .dropzone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 16px;
+        }
+
+        .dropzone:hover, .dropzone.dragover {
+            border-color: var(--accent);
+            background: rgba(88, 166, 255, 0.05);
+        }
+
+        .dropzone .icon { font-size: 36px; margin-bottom: 8px; }
+
+        .dropzone p { color: var(--text-muted); font-size: 13px; }
+
+        .dropzone .filename {
+            color: var(--accent);
+            font-weight: 600;
+            font-family: var(--mono);
+            font-size: 13px;
+            margin-top: 6px;
+        }
+
+        /* ─── Form ─── */
+        .form-group { margin-bottom: 14px; }
+
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        select, input[type="text"] {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: var(--text);
+            font-size: 13px;
+            font-family: var(--mono);
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+        /* ─── Acciones ─── */
+        .actions-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .actions-grid button { width: 100%; padding: 10px; }
+
+        /* ─── Consola ─── */
+        .console {
+            background: #010409;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: var(--mono);
+            font-size: 12px;
+            line-height: 1.6;
+            padding: 14px;
+            height: 420px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .console .line { color: var(--text-muted); }
+
+        .console .line.ok { color: var(--success); }
+        .console .line.err { color: var(--danger); }
+        .console .line.warn { color: var(--warning); }
+        .console .line.info { color: var(--accent); }
+        .console .line.header { color: #fff; font-weight: bold; }
+
+        .console-empty {
+            color: var(--text-muted);
+            text-align: center;
+            padding-top: 180px;
+            font-size: 13px;
+        }
+
+        /* ─── Status bar ─── */
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            font-family: var(--mono);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            display: inline-block;
+            margin-right: 6px;
+        }
+
+        .status-dot.running { background: var(--warning); animation: pulse 1s infinite; }
+        .status-dot.completed { background: var(--success); }
+        .status-dot.failed { background: var(--danger); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* ─── Tabla de artefactos ─── */
+        .artifacts-table { width: 100%; border-collapse: collapse; }
+
+        .artifacts-table th {
+            text-align: left;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            padding: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .artifacts-table td {
+            padding: 10px 8px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .artifacts-table tr:last-child td { border-bottom: none; }
+
+        .artifact-name {
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--accent);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .badge.ipa { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+        .badge.txt { background: rgba(139, 148, 158, 0.15); color: var(--text-muted); }
+
+        /* ─── Toast ─── */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 18px;
+            font-size: 13px;
+            display: none;
+            z-index: 1000;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+
+        .toast.show { display: block; animation: slideIn 0.3s; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .toast.success { border-color: var(--success); }
+        .toast.error { border-color: var(--danger); }
+
+        /* ─── Loading ─── */
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ─── Sección colapsable ─── */
+        .section-toggle {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .section-toggle .arrow {
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+
+        .section-toggle.collapsed .arrow { transform: rotate(-90deg); }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo">
+            <div class="logo-icon">🛡️</div>
+            <div>
+                <h1>CuySideStore</h1>
+                <small>Pruebas de seguridad iOS — mini SideStore local</small>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button onclick="runDoctor()">🔍 Doctor</button>
+            <button onclick="loadCerts()">📜 Certificados</button>
+            <button onclick="refreshArtifacts()">📁 Refrescar</button>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Columna izquierda: controles -->
+        <div>
+            <!-- Upload -->
+            <div class="card">
+                <h2><span class="icon">📦</span> IPA a probar</h2>
+                <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+                    <div class="icon">📱</div>
+                    <p>Arrastra tu IPA aquí<br>o haz clic para seleccionar</p>
+                    <div class="filename" id="filename"></div>
+                </div>
+                <input type="file" id="fileInput" accept=".ipa" style="display:none" onchange="onFileSelected(event)">
+
+                <div class="form-group">
+                    <label>Certificado de firma</label>
+                    <select id="certSelect" onchange="onCertChanged()">
+                        <option value="">Auto-seleccionar (Apple Development)</option>
+                    </select>
+                    <div class="hint">Se usa para re-firmar el IPA (simula sideloading)</div>
+                </div>
+
+                <div class="form-group">
+                    <label>Preset de entitlements</label>
+                    <select id="presetSelect">
+                        <option value="desarrollo">desarrollo (simula sideload)</option>
+                        <option value="plataforma">plataforma (simula TrollStore)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Acciones -->
+            <div class="card">
+                <h2><span class="icon">⚡</span> Acciones</h2>
+                <button class="primary" style="width:100%; padding:12px; margin-bottom:12px;" id="pipelineBtn" onclick="runPipeline()" disabled>
+                    🚀 Ejecutar Pipeline Completo
+                </button>
+                <div class="actions-grid">
+                    <button onclick="runCommand('analyze')" id="analyzeBtn" disabled>🔍 Analizar</button>
+                    <button onclick="runCommand('resign')" id="resignBtn" disabled>✍️ Re-firmar</button>
+                    <button onclick="runCommand('inject')" id="injectBtn" disabled>💉 Inyectar dylib</button>
+                    <button onclick="runCommand('ents')" id="entsBtn" disabled>🔑 Entitlements</button>
+                </div>
+                <div class="hint" style="margin-top:12px;">
+                    El pipeline ejecuta los 4 pasos y genera los IPAs en <code>output/</code>
+                </div>
+            </div>
+
+            <!-- IPAs subidos -->
+            <div class="card" id="uploadsCard" style="display:none;">
+                <h2><span class="icon">📂</span> IPAs subidos</h2>
+                <div id="uploadsList"></div>
+            </div>
+        </div>
+
+        <!-- Columna derecha: consola y artefactos -->
+        <div>
+            <!-- Consola -->
+            <div class="card">
+                <h2><span class="icon">🖥️</span> Consola
+                    <span id="jobStatus" style="margin-left:auto; font-size:11px; font-weight:400; color:var(--text-muted);"></span>
+                </h2>
+                <div class="status-bar">
+                    <div>
+                        <span class="status-dot" id="statusDot"></span>
+                        <span id="statusText">Listo</span>
+                    </div>
+                    <div>
+                        <span id="lineCount">0 líneas</span>
+                        <button class="small" onclick="clearConsole()" style="margin-left:10px;">Limpiar</button>
+                    </div>
+                </div>
+                <div class="console" id="console">
+                    <div class="console-empty">
+                        Sube un IPA y ejecuta una acción para ver la salida aquí
+                    </div>
+                </div>
+            </div>
+
+            <!-- Artefactos -->
+            <div class="card">
+                <h2><span class="icon">📁</span> Artefactos generados
+                    <button class="small" style="margin-left:auto;" onclick="refreshArtifacts()">↻ Actualizar</button>
+                </h2>
+                <div id="artifactsList">
+                    <p class="hint">Sin artefactos aún — ejecuta el pipeline para generarlos</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ─── Estado ───
+        let selectedFile = null;
+        let currentJobId = null;
+        let eventSource = null;
+
+        // ─── Toast ───
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast show ${type}`;
+            setTimeout(() => toast.className = 'toast', 4000);
+        }
+
+        // ─── Upload ───
+        const dropzone = document.getElementById('dropzone');
+
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleFile(files[0]);
+        });
+
+        function onFileSelected(event) {
+            if (event.target.files.length > 0) handleFile(event.target.files[0]);
+        }
+
+        function handleFile(file) {
+            if (!file.name.endsWith('.ipa')) {
+                showToast('El archivo debe ser un .ipa', 'error');
+                return;
+            }
+            selectedFile = file;
+            document.getElementById('filename').textContent = file.name;
+            enableButtons();
+            showToast(`IPA seleccionado: ${file.name}`);
+        }
+
+        function enableButtons() {
+            ['pipelineBtn', 'analyzeBtn', 'resignBtn', 'injectBtn', 'entsBtn'].forEach(id => {
+                document.getElementById(id).disabled = false;
+            });
+        }
+
+        // ─── Certificados ───
+        async function loadCerts() {
+            const resp = await fetch('/api/certs');
+            const { jobId } = await resp.json();
+            streamJob(jobId, 'Certificados disponibles');
+
+            // Esperar a que el job termine (polling del estado)
+            await waitForJob(jobId);
+
+            // Parsear los certificados del output para poblar el select
+            const outResp = await fetch(`/api/jobs/${jobId}/output`);
+            const { lines } = await outResp.json();
+            const select = document.getElementById('certSelect');
+
+            // Limpiar opciones existentes (excepto la primera)
+            while (select.options.length > 1) select.remove(1);
+
+            lines.forEach(line => {
+                // Limpiar ANSI antes de parsear
+                const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
+                const match = clean.match(/"(.+)"/);
+                if (match && clean.includes('Apple')) {
+                    const option = document.createElement('option');
+                    option.value = match[1];
+                    option.textContent = match[1];
+                    select.appendChild(option);
+                }
+            });
+        }
+
+        // Esperar a que un job termine (polling cada 500ms)
+        async function waitForJob(jobId, maxWaitMs = 30000) {
+            const start = Date.now();
+            while (Date.now() - start < maxWaitMs) {
+                const resp = await fetch(`/api/jobs/${jobId}`);
+                const job = await resp.json();
+                if (job.status !== 'running') return job;
+                await new Promise(r => setTimeout(r, 500));
+            }
+            return null;
+        }
+
+        function onCertChanged() {
+            // El certificado seleccionado se usa en resign/pipeline
+        }
+
+        // ─── Ejecutar comandos ───
+        async function runPipeline() {
+            if (!selectedFile) return;
+            const cert = document.getElementById('certSelect').value;
+
+            const formData = new FormData();
+            formData.append('ipa', selectedFile);
+            if (cert) formData.append('cert', cert);
+
+            const resp = await fetch('/api/pipeline', { method: 'POST', body: formData });
+            const data = await resp.json();
+
+            if (data.jobId) {
+                streamJob(data.jobId, `Pipeline: ${data.filename}`);
+                refreshArtifactsSoon();
+            }
+        }
+
+        async function runCommand(command) {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('ipa', selectedFile);
+
+            let endpoint = `/api/${command}`;
+            if (command === 'resign') {
+                const cert = document.getElementById('certSelect').value;
+                if (!cert) {
+                    // Si no hay certificado seleccionado, cargar los primeros
+                    await loadCerts();
+                    showToast('Selecciona un certificado primero', 'error');
+                    return;
+                }
+                formData.append('cert', cert);
+            }
+            if (command === 'ents') {
+                formData.append('preset', document.getElementById('presetSelect').value);
+            }
+
+            const resp = await fetch(endpoint, { method: 'POST', body: formData });
+            const data = await resp.json();
+
+            if (data.jobId) {
+                streamJob(data.jobId, `${command}: ${data.filename}`);
+                refreshArtifactsSoon();
+            }
+        }
+
+        async function runDoctor() {
+            const resp = await fetch('/api/doctor');
+            const { jobId } = await resp.json();
+            streamJob(jobId, 'Doctor — verificación de dependencias');
+        }
+
+        // ─── Streaming de jobs ───
+        function streamJob(jobId, label) {
+            // Cerrar stream anterior
+            if (eventSource) eventSource.close();
+
+            currentJobId = jobId;
+            clearConsole();
+            updateStatus('running', `Ejecutando: ${label}`);
+
+            eventSource = new EventSource(`/api/jobs/${jobId}/stream`);
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.done) {
+                    eventSource.close();
+                    if (data.status === 'completed') {
+                        updateStatus('completed', `✓ Completado (exit ${data.exitCode})`);
+                        showToast('Comando completado exitosamente');
+                        refreshArtifacts();
+                    } else {
+                        updateStatus('failed', `❌ Falló (exit ${data.exitCode})`);
+                        showToast('El comando falló — revisa la consola', 'error');
+                    }
+                    return;
+                }
+
+                appendLine(data.line);
+            };
+
+            eventSource.onerror = () => {
+                eventSource.close();
+                updateStatus('failed', 'Error de conexión');
+            };
+        }
+
+        // ─── Consola ───
+        // Limpiar códigos ANSI de color del output del CLI
+        function stripAnsi(line) {
+            return line.replace(/\x1b\[[0-9;]*m/g, '');
+        }
+
+        function appendLine(line) {
+            const consoleEl = document.getElementById('console');
+
+            // Remover placeholder si existe
+            const empty = consoleEl.querySelector('.console-empty');
+            if (empty) empty.remove();
+
+            const clean = stripAnsi(line);
+
+            const div = document.createElement('div');
+            div.className = 'line ' + classifyLine(clean);
+            div.textContent = clean;
+            consoleEl.appendChild(div);
+
+            // Auto-scroll
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+
+            // Actualizar contador
+            const count = consoleEl.querySelectorAll('.line').length;
+            document.getElementById('lineCount').textContent = `${count} líneas`;
+        }
+
+        function classifyLine(line) {
+            if (line.includes('✓')) return 'ok';
+            if (line.includes('❌')) return 'err';
+            if (line.includes('⚠️')) return 'warn';
+            if (line.includes('▸') || line.includes('PASO')) return 'info';
+            if (line.includes('═══')) return 'header';
+            return '';
+        }
+
+        function clearConsole() {
+            document.getElementById('console').innerHTML =
+                '<div class="console-empty">Sube un IPA y ejecuta una acción para ver la salida aquí</div>';
+            document.getElementById('lineCount').textContent = '0 líneas';
+        }
+
+        function updateStatus(status, text) {
+            const dot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const jobStatus = document.getElementById('jobStatus');
+
+            dot.className = 'status-dot ' + status;
+            statusText.textContent = text;
+            jobStatus.textContent = status === 'running' ? '● ejecutando' : '';
+        }
+
+        // ─── Artefactos ───
+        async function refreshArtifacts() {
+            const resp = await fetch('/api/artifacts');
+            const { artifacts } = await resp.json();
+            const container = document.getElementById('artifactsList');
+
+            if (artifacts.length === 0) {
+                container.innerHTML = '<p class="hint">Sin artefactos aún — ejecuta el pipeline para generarlos</p>';
+                return;
+            }
+
+            let html = '<table class="artifacts-table">';
+            html += '<tr><th>Archivo</th><th>Tamaño</th><th>Modificado</th><th></th></tr>';
+
+            artifacts.forEach(a => {
+                const time = new Date(a.modified).toLocaleTimeString();
+                html += `<tr>
+                    <td>
+                        <span class="artifact-name">${a.name}</span>
+                        <span class="badge ${a.isIpa ? 'ipa' : 'txt'}">${a.isIpa ? 'IPA' : 'TXT'}</span>
+                    </td>
+                    <td>${a.sizeHuman}</td>
+                    <td>${time}</td>
+                    <td>
+                        <button class="small" onclick="downloadArtifact('${a.name}')">⬇</button>
+                        <button class="small danger" onclick="deleteArtifact('${a.name}')">✕</button>
+                    </td>
+                </tr>`;
+            });
+
+            html += '</table>';
+            container.innerHTML = html;
+        }
+
+        function refreshArtifactsSoon() {
+            // Refrescar artefactos después de un delay (el job puede tardar)
+            setTimeout(refreshArtifacts, 2000);
+        }
+
+        function downloadArtifact(name) {
+            window.open(`/api/artifacts/${encodeURIComponent(name)}/download`, '_blank');
+        }
+
+        async function deleteArtifact(name) {
+            if (!confirm(`¿Eliminar ${name}?`)) return;
+            await fetch(`/api/artifacts/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            refreshArtifacts();
+            showToast(`Eliminado: ${name}`);
+        }
+
+        // ─── Init ───
+        refreshArtifacts();
+        loadCerts(); // poblar el select de certificados al cargar
+    </script>
+</body>
+</html>
