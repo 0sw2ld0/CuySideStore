@@ -11,16 +11,20 @@
 ```
 CuySideStore/
 ├── README.md                          ← Este archivo
+├── bin/
+│   └── insert_dylib                   ← Binario compilado (autocontenido)
 ├── docs/
 │   ├── TESTING-PLAN.md                ← Plan de pruebas paso a paso
 │   ├── DETECTION-VALIDATION.md        ← Cómo validar tus detecciones
 │   └── RESULTS-TEMPLATE.md            ← Plantilla para registrar resultados
 ├── scripts/                           ← Herramientas de escritorio (macOS)
+│   ├── cuysidestore                   ← Tool CLI unificada (punto de entrada)
 │   ├── resign_ipa.sh                  ← Re-firma un IPA con certificado propio
 │   ├── inject_dylib.sh                ← Inyecta una dylib de prueba en un IPA
 │   ├── modify_entitlements.sh         ← Modifica entitlements de un IPA
 │   ├── analyze_ipa.sh                 ← Análisis estático de un IPA
 │   └── setup_test_cert.sh             ← Crea certificado de pruebas autofirmado
+├── output/                            ← IPAs generados por el pipeline (gitignored)
 ├── test-dylibs/                       ← Dylibs de prueba (para inyección)
 │   ├── hook_license.c                 ← Hook de bypass de licencia (simulado)
 │   ├── hook_network.c                 ← Hook de intercepción de red (simulado)
@@ -88,7 +92,39 @@ graph TB
 
 ## Inicio rápido
 
-### Paso 1: Configurar certificado de pruebas
+### Tool CLI unificada (recomendado)
+
+```bash
+cd CuySideStore
+
+# Verificar que todo está listo
+./scripts/cuysidestore doctor
+
+# Ver certificados disponibles
+./scripts/cuysidestore certs
+
+# Pipeline completo: analyze + resign + inject + ents en un solo comando
+./scripts/cuysidestore pipeline /path/a/TuApp.ipa
+
+# Comandos individuales
+./scripts/cuysidestore analyze /path/a/TuApp.ipa
+./scripts/cuysidestore resign /path/a/TuApp.ipa --cert "Apple Development: tu@email.com"
+./scripts/cuysidestore inject /path/a/TuApp.ipa --dylib test-dylibs/hook_license.dylib
+./scripts/cuysidestore ents /path/a/TuApp.ipa --preset desarrollo
+
+# Servidor de pruebas
+./scripts/cuysidestore server
+```
+
+El comando `pipeline` genera automáticamente en `output/`:
+- `TuApp_analysis.txt` — análisis estático completo
+- `TuApp_resigned.ipa` — re-firmada con certificado de desarrollo (simula sideloading)
+- `TuApp_hooked.ipa` — con dylib inyectada (simula hooking)
+- `TuApp_entitlements.ipa` — con entitlements de desarrollo (simula sideload)
+
+### Scripts individuales (alternativa)
+
+#### Paso 1: Configurar certificado de pruebas
 
 ```bash
 cd CuySideStore/scripts

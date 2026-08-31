@@ -174,7 +174,13 @@ done
 echo ""
 echo "▸ Empaquetando IPA..."
 cd "$WORK_DIR"
-zip -qry "$OLDPWD/$OUTPUT_PATH" Payload
+# Soportar rutas absolutas y relativas para el output
+case "$OUTPUT_PATH" in
+    /*) ZIP_TARGET="$OUTPUT_PATH" ;;
+    *)  ZIP_TARGET="$OLDPWD/$OUTPUT_PATH" ;;
+esac
+mkdir -p "$(dirname "$ZIP_TARGET")"
+zip -qry "$ZIP_TARGET" Payload
 
 echo ""
 echo "═════════════════════════════════════════════════════════════"

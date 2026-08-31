@@ -53,20 +53,28 @@ if [ -z "$OUTPUT_PATH" ]; then
     OUTPUT_PATH="${BASENAME}_hooked.ipa"
 fi
 
-# Verificar insert_dylib
-INSERT_DYLIB="insert_dylib"
-if ! command -v insert_dylib &>/dev/null; then
-    echo "❌ ERROR: insert_dylib no está instalado."
-    echo ""
-    echo "Instálalo con:"
-    echo "  brew install insert_dylib"
-    echo ""
-    echo "O compílalo desde fuente:"
-    echo "  git clone https://github.com/Tyilo/insert_dylib"
-    echo "  cd insert_dylib"
-    echo "  xcodebuild -project insert_dylib.xcodeproj"
-    echo "  cp build/Release/insert_dylib /usr/local/bin/"
-    exit 1
+# Verificar insert_dylib — usa el binario incluido en el proyecto
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+INSERT_DYLIB="$PROJECT_DIR/bin/insert_dylib"
+
+if [ ! -x "$INSERT_DYLIB" ]; then
+    # Fallback: buscar en PATH
+    if command -v insert_dylib &>/dev/null; then
+        INSERT_DYLIB="insert_dylib"
+    else
+        echo "❌ ERROR: insert_dylib no está disponible."
+        echo ""
+        echo "El proyecto incluye el binario en bin/insert_dylib."
+        echo "Si no existe, compílalo:"
+        echo "  git clone https://github.com/Tyilo/insert_dylib /tmp/insert_dylib"
+        echo "  cd /tmp/insert_dylib"
+        echo "  xcodebuild -project insert_dylib.xcodeproj -target insert_dylib \\"
+        echo "    -configuration Release build CONFIGURATION_BUILD_DIR=$PROJECT_DIR/bin"
+        echo ""
+        echo "O instálalo en PATH y el script lo usará automáticamente."
+        exit 1
+    fi
 fi
 
 WORK_DIR=$(mktemp -d)
@@ -107,11 +115,14 @@ for app in "$PAYLOAD_DIR"/*.app; do
 
     # 2b. Modificar el Load Command del binario principal
     #     Esto hace que iOS cargue la dylib al iniciar la app
+    #     --all-yes evita prompts interactivos
     echo "  ▸ Modificando Load Commands del binario..."
-    if "$INSERT_DYLIB" --inplace --weak "$DYLIB_NAME" "$BINARY" 2>&1; then
+    "$INSERT_DYLIB" --inplace --weak --all-yes "$DYLIB_NAME" "$BINARY" 2>&1
+    INSERT_STATUS=$?
+    if [ $INSERT_STATUS -eq 0 ]; then
         echo "  ✓ Load Command agregado: @executable_path/$DYLIB_NAME"
     else
-        echo "  ❌ ERROR al modificar el binario"
+        echo "  ❌ ERROR al modificar el binario (exit $INSERT_STATUS)"
         rm -rf "$WORK_DIR"
         exit 1
     fi
@@ -134,18 +145,21 @@ for app in "$PAYLOAD_DIR"/*.app; do
     
     if [ -n "$CERT" ]; then
         # Extraer entitlements originales
-        ORIG_ENTITLEMENTS=$(codesign -d --entitlements :- "$app" 2>/dev/null)
+        # || true evita que set -e mate el script si no hay entitlements
+        ORIG_ENTITLEMENTS=$(codesign -d --entitlements :- "$app" 2>/dev/null || true)
         ENT_ARGS=()
         if [ -n "$ORIG_ENTITLEMENTS" ]; then
             ENT_FILE="$WORK_DIR/ent.plist"
             echo "$ORIG_ENTITLEMENTS" > "$ENT_FILE"
-            ENT_ARGS+=(--entitlements "$ENT_FILE")
+            ENT_ARGS+=(--entitlements)
+            ENT_ARGS+=("$ENT_FILE")
         fi
-        codesign -f -s "$CERT" "${ENT_ARGS[@]}" "$app" && \
-            echo "  ✓ Re-firmado con: $CERT"
+        codesign -f -s "$CERT" ${ENT_ARGS[@]+"${ENT_ARGS[@]}"} "$app" && \
+            echo "  ✓ Re-firmado con: $CERT" || \
+            echo "  ⚠️ Falló codesign — intentando con ldid"
     else
         echo "  ⚠️ Sin certificado de desarrollo — usando ldid"
-        ldid -S "$BINARY"
+        ldid -S "$BINARY" || true
     fi
 done
 
@@ -153,7 +167,13 @@ done
 echo ""
 echo "▸ Empaquetando IPA con dylib inyectada..."
 cd "$WORK_DIR"
-zip -qry "$OLDPWD/$OUTPUT_PATH" Payload
+# Soportar rutas absolutas y relativas para el output
+case "$OUTPUT_PATH" in
+    /*) ZIP_TARGET="$OUTPUT_PATH" ;;
+    *)  ZIP_TARGET="$OLDPWD/$OUTPUT_PATH" ;;
+esac
+mkdir -p "$(dirname "$ZIP_TARGET")"
+zip -qry "$ZIP_TARGET" Payload
 
 echo ""
 echo "═════════════════════════════════════════════════════════════"

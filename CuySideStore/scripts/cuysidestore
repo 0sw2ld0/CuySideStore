@@ -1,0 +1,391 @@
+#!/bin/bash
+#
+# CuySideStore — Tool CLI unificada
+#
+# Automatiza todo el pipeline de pruebas de seguridad:
+#   analyze  → Análisis estático de un IPA
+#   resign   → Re-firma un IPA (simula sideloading)
+#   inject   → Inyecta una dylib de prueba (simula hooking)
+#   ents     → Modifica entitlements (simula TrollStore/sideload)
+#   server   → Inicia el servidor de pruebas
+#   pipeline → Ejecuta TODO: analyze + resign + inject + ents
+#   certs    → Lista certificados de codesigning disponibles
+#   dylibs   → Compila las dylibs de prueba
+#   doctor   → Verifica que todas las dependencias estén listas
+#
+# Uso: ./cuysidestore <comando> [argumentos]
+
+set -e
+
+# ─── Localizar el proyecto ─────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+# ─── Colores ───────────────────────────────────────────────────
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+# ─── Helpers ───────────────────────────────────────────────────
+header() {
+    echo -e "${BOLD}═════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}  $1${NC}"
+    echo -e "${BOLD}═════════════════════════════════════════════════════════════${NC}"
+}
+
+ok()   { echo -e "${GREEN}✓ $1${NC}"; }
+fail() { echo -e "${RED}❌ $1${NC}"; }
+warn() { echo -e "${YELLOW}⚠️ $1${NC}"; }
+info() { echo -e "${BLUE}▸ $1${NC}"; }
+
+# ─── Comandos ──────────────────────────────────────────────────
+
+cmd_doctor() {
+    header "CuySideStore — Doctor (verificación de dependencias)"
+    echo ""
+
+    local all_ok=true
+
+    # macOS
+    info "macOS..."
+    if [ "$(uname)" = "Darwin" ]; then
+        ok "macOS $(sw_vers -productVersion)"
+    else
+        fail "Este proyecto requiere macOS"
+        all_ok=false
+    fi
+    echo ""
+
+    # Xcode
+    info "Xcode..."
+    if xcode-select -p &>/dev/null && xcrun --sdk iphoneos --show-sdk-path &>/dev/null; then
+        local xcode_version
+        xcode_version=$(xcodebuild -version | head -1 | awk '{print $2}')
+        ok "Xcode $xcode_version con SDK de iPhoneOS"
+    else
+        fail "Xcode o SDK de iPhoneOS no disponible"
+        warn "Instala Xcode y ejecuta: sudo xcode-select -s /Applications/Xcode.app"
+        all_ok=false
+    fi
+    echo ""
+
+    # Certificados
+    info "Certificados de codesigning..."
+    local cert_count
+    cert_count=$(security find-identity -v -p codesigning 2>/dev/null | grep -c "valid identities" || echo "0")
+    if [ "$cert_count" -gt 0 ]; then
+        ok "$cert_count certificado(s) de codesigning disponible(s)"
+        security find-identity -v -p codesigning 2>/dev/null | grep "Apple" | sed 's/^/    /'
+    else
+        fail "Sin certificados de codesigning"
+        warn "Abre Xcode una vez para generar uno, o crea uno en Keychain Access"
+        all_ok=false
+    fi
+    echo ""
+
+    # ldid
+    info "ldid..."
+    if command -v ldid &>/dev/null; then
+        ok "ldid $(ldid -V 2>/dev/null || echo 'instalado')"
+    else
+        warn "ldid no instalado (necesario para firmar dylibs)"
+        warn "  brew install ldid"
+    fi
+    echo ""
+
+    # insert_dylib
+    info "insert_dylib..."
+    if [ -x "$PROJECT_DIR/bin/insert_dylib" ]; then
+        ok "bin/insert_dylib (incluido en el proyecto)"
+    elif command -v insert_dylib &>/dev/null; then
+        ok "insert_dylib (en PATH)"
+    else
+        warn "insert_dylib no disponible (necesario para inyección de dylibs)"
+        warn "  Ver scripts/inject_dylib.sh para instrucciones de compilación"
+    fi
+    echo ""
+
+    # Node.js
+    info "Node.js (para el servidor de pruebas)..."
+    if command -v node &>/dev/null; then
+        ok "Node.js $(node --version)"
+        if [ -d "$PROJECT_DIR/server/node_modules" ]; then
+            ok "Dependencias del servidor instaladas"
+        else
+            warn "Dependencias del servidor no instaladas"
+            warn "  cd server && npm install"
+        fi
+    else
+        warn "Node.js no instalado (el servidor de pruebas no funcionará)"
+        warn "  brew install node"
+    fi
+    echo ""
+
+    # Dispositivo iOS
+    info "Dispositivo iOS conectado..."
+    if command -v idevice_id &>/dev/null; then
+        local devices
+        devices=$(idevice_id -l 2>/dev/null)
+        if [ -n "$devices" ]; then
+            ok "Dispositivo conectado: $devices"
+        else
+            warn "Ningún dispositivo conectado (las pruebas en dispositivo requieren uno)"
+        fi
+    else
+        warn "libimobiledevice no instalado (no se puede detectar dispositivo)"
+        warn "  brew install libimobiledevice ideviceinstaller"
+    fi
+    echo ""
+
+    # Dylibs compiladas
+    info "Dylibs de prueba..."
+    if [ -f "$PROJECT_DIR/test-dylibs/hook_license.dylib" ]; then
+        ok "hook_license.dylib compilada"
+    else
+        warn "Dylibs no compiladas"
+        warn "  cd test-dylibs && make"
+    fi
+    echo ""
+
+    header "Resultado del doctor"
+    if [ "$all_ok" = true ]; then
+        ok "Todo listo para las pruebas locales (sin dispositivo)"
+    else
+        warn "Hay dependencias faltantes — ver arriba"
+    fi
+}
+
+cmd_certs() {
+    header "CuySideStore — Certificados de codesigning"
+    echo ""
+    security find-identity -v -p codesigning 2>/dev/null | sed 's/^/  /'
+    echo ""
+    info "Usa el nombre EXACTO entre comillas con: ./cuysidestore resign <ipa> --cert \"...\""
+}
+
+cmd_dylibs() {
+    header "CuySideStore — Compilar dylibs de prueba"
+    echo ""
+    cd "$PROJECT_DIR/test-dylibs"
+    make clean 2>/dev/null || true
+    make
+    echo ""
+    ok "Dylibs compiladas en test-dylibs/"
+}
+
+cmd_analyze() {
+    if [ $# -lt 1 ]; then
+        echo "Uso: $0 analyze <archivo.ipa>"
+        exit 1
+    fi
+    "$SCRIPT_DIR/analyze_ipa.sh" "$@"
+}
+
+cmd_resign() {
+    if [ $# -lt 1 ]; then
+        echo "Uso: $0 resign <archivo.ipa> --cert <nombre> [--output <out.ipa>]"
+        echo ""
+        echo "Certificados disponibles:"
+        security find-identity -v -p codesigning 2>/dev/null | grep "Apple" | sed 's/^/  /'
+        exit 1
+    fi
+    "$SCRIPT_DIR/resign_ipa.sh" "$@"
+}
+
+cmd_inject() {
+    if [ $# -lt 1 ]; then
+        echo "Uso: $0 inject <archivo.ipa> --dylib <ruta.dylib> [--output <out.ipa>]"
+        echo ""
+        echo "Dylibs disponibles (compila con: $0 dylibs):"
+        ls "$PROJECT_DIR/test-dylibs/"*.dylib 2>/dev/null | sed 's/^/  /' || echo "  (ninguna — ejecuta: $0 dylibs)"
+        exit 1
+    fi
+    "$SCRIPT_DIR/inject_dylib.sh" "$@"
+}
+
+cmd_ents() {
+    if [ $# -lt 1 ]; then
+        echo "Uso: $0 ents <archivo.ipa> [--preset <plataforma|desarrollo>] [--file <ent.plist>] [--output <out.ipa>]"
+        exit 1
+    fi
+    "$SCRIPT_DIR/modify_entitlements.sh" "$@"
+}
+
+cmd_server() {
+    header "CuySideStore — Servidor de pruebas"
+    echo ""
+    cd "$PROJECT_DIR/server"
+
+    if [ ! -d node_modules ]; then
+        info "Instalando dependencias..."
+        npm install --silent
+    fi
+
+    info "Iniciando servidor en http://localhost:3000"
+    info "Presiona Ctrl+C para detener"
+    echo ""
+    exec node server.js
+}
+
+cmd_pipeline() {
+    if [ $# -lt 1 ]; then
+        echo "Uso: $0 pipeline <archivo.ipa> [--cert <nombre>]"
+        echo ""
+        echo "Ejecuta TODO el pipeline de pruebas:"
+        echo "  1. Análisis estático del IPA"
+        echo "  2. Re-firma con certificado de desarrollo"
+        echo "  3. Inyección de dylib de prueba"
+        echo "  4. Modificación de entitlements (desarrollo)"
+        echo ""
+        echo "Certificados disponibles:"
+        security find-identity -v -p codesigning 2>/dev/null | grep "Apple" | sed 's/^/  /'
+        exit 1
+    fi
+
+    local IPA_PATH="$1"
+    shift
+
+    local CERT=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --cert) CERT="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+
+    if [ ! -f "$IPA_PATH" ]; then
+        fail "No existe: $IPA_PATH"
+        exit 1
+    fi
+
+    # Auto-seleccionar certificado si no se especificó
+    if [ -z "$CERT" ]; then
+        info "Auto-seleccionando certificado de desarrollo..."
+        CERT=$(security find-identity -v -p codesigning 2>/dev/null | \
+            grep "Apple Development" | head -1 | \
+            sed 's/.*"\(.*\)".*/\1/')
+        if [ -z "$CERT" ]; then
+            fail "No hay certificado 'Apple Development' disponible"
+            exit 1
+        fi
+        ok "Certificado seleccionado: $CERT"
+    fi
+
+    # Compilar dylibs si no existen
+    if [ ! -f "$PROJECT_DIR/test-dylibs/hook_license.dylib" ]; then
+        info "Compilando dylibs de prueba..."
+        cmd_dylibs >/dev/null 2>&1
+    fi
+
+    local BASENAME
+    BASENAME=$(basename "$IPA_PATH" .ipa)
+    local OUT_DIR="$PROJECT_DIR/output"
+    mkdir -p "$OUT_DIR"
+
+    echo ""
+    # ─── Paso 1: Análisis ─────────────────────────────────────
+    header "PASO 1/4 — Análisis estático"
+    "$SCRIPT_DIR/analyze_ipa.sh" "$IPA_PATH" | tee "$OUT_DIR/${BASENAME}_analysis.txt"
+
+    echo ""
+    # ─── Paso 2: Re-firma ─────────────────────────────────────
+    header "PASO 2/4 — Re-firma (simula sideloading)"
+    "$SCRIPT_DIR/resign_ipa.sh" "$IPA_PATH" --cert "$CERT" \
+        --output "$OUT_DIR/${BASENAME}_resigned.ipa"
+
+    echo ""
+    # ─── Paso 3: Inyección de dylib ───────────────────────────
+    header "PASO 3/4 — Inyección de dylib (simula hooking)"
+    "$SCRIPT_DIR/inject_dylib.sh" "$IPA_PATH" \
+        --dylib "$PROJECT_DIR/test-dylibs/hook_license.dylib" \
+        --output "$OUT_DIR/${BASENAME}_hooked.ipa"
+
+    echo ""
+    # ─── Paso 4: Entitlements ─────────────────────────────────
+    header "PASO 4/4 — Entitlements de desarrollo (simula sideload)"
+    "$SCRIPT_DIR/modify_entitlements.sh" "$IPA_PATH" --preset desarrollo \
+        --output "$OUT_DIR/${BASENAME}_entitlements.ipa"
+
+    # ─── Resumen ──────────────────────────────────────────────
+    echo ""
+    header "PIPELINE COMPLETADO"
+    echo ""
+    echo "  IPAs generados en $OUT_DIR/:"
+    ls -lh "$OUT_DIR/${BASENAME}"*.ipa 2>/dev/null | awk '{print "    " $NF " (" $5 ")"}'
+    echo ""
+    echo "  Análisis guardado en: $OUT_DIR/${BASENAME}_analysis.txt"
+    echo ""
+    info "Próximos pasos:"
+    echo "    1. Instala cada IPA en tu dispositivo de pruebas"
+    echo "    2. Abre tu app y verifica si detecta las modificaciones"
+    echo "    3. Registra resultados en docs/RESULTS-TEMPLATE.md"
+    echo ""
+}
+
+cmd_help() {
+    header "CuySideStore — Tool CLI para pruebas de seguridad"
+    echo ""
+    echo "  Uso: $0 <comando> [argumentos]"
+    echo ""
+    echo "  Comandos:"
+    echo ""
+    echo "    doctor              Verifica que todas las dependencias estén listas"
+    echo "    certs               Lista certificados de codesigning disponibles"
+    echo "    dylibs              Compila las dylibs de prueba"
+    echo ""
+    echo "    analyze <ipa>       Análisis estático de un IPA"
+    echo "    resign <ipa>        Re-firma un IPA (simula sideloading)"
+    echo "                        --cert <nombre> [--output <out.ipa>]"
+    echo "    inject <ipa>        Inyecta una dylib de prueba (simula hooking)"
+    echo "                        --dylib <ruta> [--output <out.ipa>]"
+    echo "    ents <ipa>          Modifica entitlements (simula TrollStore/sideload)"
+    echo "                        --preset <plataforma|desarrollo> [--output <out.ipa>]"
+    echo ""
+    echo "    pipeline <ipa>      Ejecuta TODO: analyze + resign + inject + ents"
+    echo "                        [--cert <nombre>]"
+    echo "    server              Inicia el servidor de pruebas (localhost:3000)"
+    echo ""
+    echo "  Ejemplos:"
+    echo ""
+    echo "    $0 doctor"
+    echo "    $0 certs"
+    echo "    $0 analyze MiApp.ipa"
+    echo "    $0 resign MiApp.ipa --cert \"Apple Development: oswaldo@ejemplo.com\""
+    echo "    $0 inject MiApp.ipa --dylib test-dylibs/hook_license.dylib"
+    echo "    $0 ents MiApp.ipa --preset desarrollo"
+    echo "    $0 pipeline MiApp.ipa"
+    echo "    $0 server"
+    echo ""
+}
+
+# ─── Main ──────────────────────────────────────────────────────
+
+if [ $# -eq 0 ]; then
+    cmd_help
+    exit 0
+fi
+
+COMMAND="$1"
+shift
+
+case "$COMMAND" in
+    doctor)   cmd_doctor "$@" ;;
+    certs)    cmd_certs "$@" ;;
+    dylibs)   cmd_dylibs "$@" ;;
+    analyze)  cmd_analyze "$@" ;;
+    resign)   cmd_resign "$@" ;;
+    inject)   cmd_inject "$@" ;;
+    ents)     cmd_ents "$@" ;;
+    pipeline) cmd_pipeline "$@" ;;
+    server)   cmd_server "$@" ;;
+    help|-h|--help) cmd_help ;;
+    *)
+        echo -e "${RED}Comando desconocido: $COMMAND${NC}"
+        echo ""
+        cmd_help
+        exit 1
+        ;;
+esac

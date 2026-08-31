@@ -99,7 +99,8 @@ for app in "$PAYLOAD_DIR"/*.app; do
     if [ -n "$ENTITLEMENTS_FILE" ]; then
         if [ -f "$ENTITLEMENTS_FILE" ]; then
             echo "  Usando entitlements de: $ENTITLEMENTS_FILE"
-            SIGN_ARGS+=(--entitlements "$ENTITLEMENTS_FILE")
+            SIGN_ARGS+=(--entitlements)
+            SIGN_ARGS+=("$ENTITLEMENTS_FILE")
         else
             echo "  ⚠️ Archivo de entitlements no encontrado: $ENTITLEMENTS_FILE"
             echo "     Firmando SIN entitlements personalizados"
@@ -107,20 +108,26 @@ for app in "$PAYLOAD_DIR"/*.app; do
     else
         # Extraer entitlements originales y reutilizarlos
         # (así la app funciona igual, pero firmada por otro certificado)
-        ORIG_ENTITLEMENTS=$(codesign -d --entitlements :- "$app" 2>/dev/null)
+        # NOTA: || true evita que set -e mate el script si el binario
+        # original no tiene firma/entitlements
+        ORIG_ENTITLEMENTS=$(codesign -d --entitlements :- "$app" 2>/dev/null || true)
         if [ -n "$ORIG_ENTITLEMENTS" ]; then
             ENT_FILE="$WORK_DIR/orig_entitlements.plist"
             echo "$ORIG_ENTITLEMENTS" > "$ENT_FILE"
-            SIGN_ARGS+=(--entitlements "$ENT_FILE")
+            SIGN_ARGS+=(--entitlements)
+            SIGN_ARGS+=("$ENT_FILE")
             echo "  Reutilizando entitlements originales"
         fi
     fi
 
     # 4b. Re-firmar el binario principal
-    if codesign -f -s "$CERT_NAME" "${SIGN_ARGS[@]}" "$app" 2>&1; then
+    # NOTA: no usar if con set -e — capturar exit code explícitamente
+    codesign -f -s "$CERT_NAME" ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} "$app" 2>&1
+    SIGN_STATUS=$?
+    if [ $SIGN_STATUS -eq 0 ]; then
         echo "  ✓ Binario principal re-firmado"
     else
-        echo "  ❌ ERROR al re-firmar $APP_NAME"
+        echo "  ❌ ERROR al re-firmar $APP_NAME (exit $SIGN_STATUS)"
         rm -rf "$WORK_DIR"
         exit 1
     fi
@@ -136,7 +143,7 @@ for app in "$PAYLOAD_DIR"/*.app; do
             fi
         done
         # Re-firmar el .app de nuevo después de los frameworks
-        codesign -f -s "$CERT_NAME" "${SIGN_ARGS[@]}" "$app" 2>/dev/null
+        codesign -f -s "$CERT_NAME" ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} "$app" 2>/dev/null || true
     fi
 
     # 4d. Verificar la nueva firma
@@ -149,7 +156,13 @@ done
 echo ""
 echo "▸ Empaquetando IPA re-firmado..."
 cd "$WORK_DIR"
-zip -qry "$OLDPWD/$OUTPUT_PATH" Payload
+# Soportar rutas absolutas y relativas para el output
+case "$OUTPUT_PATH" in
+    /*) ZIP_TARGET="$OUTPUT_PATH" ;;
+    *)  ZIP_TARGET="$OLDPWD/$OUTPUT_PATH" ;;
+esac
+mkdir -p "$(dirname "$ZIP_TARGET")"
+zip -qry "$ZIP_TARGET" Payload
 
 # 6. Verificar el IPA final
 echo "▸ Verificando IPA final..."
