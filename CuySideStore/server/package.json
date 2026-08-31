@@ -1,0 +1,14 @@
+{
+  "name": "cuysidestore-server",
+  "version": "1.0.0",
+  "description": "Servidor de pruebas para validar defensas server-side contra apps parcheadas",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
