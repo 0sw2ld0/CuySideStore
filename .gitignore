@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+
+# Binarios compilados (se regeneran con make)
+*.dylib
+*.ipa
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# Certificados y perfiles (nunca commitear)
+*.p12
+*.p8
+*.mobileprovision
+*.cer
+*.key
+
+# Secretos y resultados locales
+.env
+.env.*
+docs/RESULTS-*.local.md
+
+# Salidas de pruebas
+*.log
+output/
